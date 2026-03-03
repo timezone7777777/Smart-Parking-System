@@ -1,12 +1,14 @@
 import streamlit as st
-import database as db
-import os
+import requests
 import time
+API_URL="http://localhost:8000"
 def render_sidebar_status(placeholder):
     with placeholder.container():
-        cars_in,car_limit=db.get_free_spots('car')
-        bikes_in,bike_limit=db.get_free_spots('bike')
-        cfg=db.get_config()
+        c_req=requests.get(f"{API_URL}/spots/car").json()
+        b_req=requests.get(f"{API_URL}/spots/bike").json()
+        cfg=requests.get(f"{API_URL}/config").json()["config"]
+        cars_in,car_limit=c_req['occupied'],c_req['limit']
+        bikes_in,bike_limit=b_req['occupied'],b_req['limit']
         total_floors=cfg[1] if cfg[1]>0 else 1
         st.subheader("Live Availability")
         st.write(f"**Cars:** {car_limit-cars_in} free")
@@ -33,7 +35,7 @@ def render_sidebar_status(placeholder):
         st.markdown("---")
 def render_config_page():
     st.header("System Configuration")
-    cfg=db.get_config()
+    cfg=requests.get(f"{API_URL}/config").json()["config"]
     with st.form("config_form"):
         c1,c2=st.columns(2)
         with c1:
@@ -47,7 +49,8 @@ def render_config_page():
             new_bike_rate=st.number_input("Bike Rate",min_value=0.0,value=cfg[5])
             new_wiggle=st.number_input("Free Minutes (Entry/Exit)",min_value=0,value=cfg[6])
         if st.form_submit_button("Save Settings"):
-            db.update_config(new_floors,new_cars,new_bikes,new_car_rate,new_bike_rate,new_wiggle)
+            payload={"floors":new_floors,"cars":new_cars,"bikes":new_bikes,"c_rate":new_car_rate,"b_rate":new_bike_rate,"wiggle":new_wiggle}
+            requests.post(f"{API_URL}/config",json=payload)
             st.success("Configuration updated!")
             time.sleep(1)
             st.rerun() 
@@ -55,11 +58,7 @@ def render_config_page():
     st.subheader("Danger Zone")
     st.warning("Resetting the database will delete all history and active logs.")
     if st.button("FACTORY RESET DATABASE"):
-        try:
-            os.remove("parking.db")
-            st.success("Database deleted.")
-        except:pass
-        db.init_db()
+        requests.post(f"{API_URL}/reset")
         st.success("New Database created! System is fresh.")
         time.sleep(1.5)
         st.rerun()

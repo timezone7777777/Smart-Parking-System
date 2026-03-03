@@ -5,10 +5,12 @@ DB_NAME="parking.db"
 def init_db():
     conn=sqlite3.connect(DB_NAME)
     c=conn.cursor()
-    c.execute("PRAGMA journal_mode=WAL")  
+    # Using WAL mode to prevent database locks during high-frequency API calls
+    c.execute("PRAGMA journal_mode=WAL")
     c.execute('''CREATE TABLE IF NOT EXISTS parking_config(id INTEGER PRIMARY KEY,total_floors INTEGER,car_slots INTEGER,bike_slots INTEGER,car_rate REAL,bike_rate REAL,wiggle_min INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS active_parking(id INTEGER PRIMARY KEY,plate_number TEXT UNIQUE,vehicle_type TEXT,entry_time TEXT,image_path TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS transaction_history(id INTEGER PRIMARY KEY,plate_number TEXT,vehicle_type TEXT,entry_time TEXT,exit_time TEXT,duration_min REAL,total_fee REAL,image_path TEXT)''')
+    # This table handles both VIPs (gold highlight/free) and Blacklisted (security alerts)
     c.execute('''CREATE TABLE IF NOT EXISTS special_plates(plate_text TEXT PRIMARY KEY,category TEXT,note TEXT)''')
     c.execute("SELECT count(*) FROM parking_config")
     if c.fetchone()[0]==0:
@@ -40,20 +42,21 @@ def get_free_spots(v_type):
 def get_special_plate(plate_text):
     conn=sqlite3.connect(DB_NAME)
     c=conn.cursor()
-    c.execute("SELECT category,note FROM special_plates WHERE plate_text=?",(plate_text,))
+    # Case-insensitive check to ensure alerts fire regardless of OCR casing
+    c.execute("SELECT category,note FROM special_plates WHERE UPPER(plate_text)=?",(plate_text.upper(),))
     res=c.fetchone()
     conn.close()
     return res
 def add_special_plate(plate,category,note):
     conn=sqlite3.connect(DB_NAME)
     c=conn.cursor()
-    c.execute("REPLACE INTO special_plates (plate_text,category,note) VALUES(?,?,?)",(plate,category,note))
+    c.execute("REPLACE INTO special_plates (plate_text,category,note) VALUES(?,?,?)",(plate.upper(),category,note))
     conn.commit()
     conn.close()
 def remove_special_plate(plate):
     conn=sqlite3.connect(DB_NAME)
     c=conn.cursor()
-    c.execute("DELETE FROM special_plates WHERE plate_text=?",(plate,))
+    c.execute("DELETE FROM special_plates WHERE UPPER(plate_text)=?",(plate.upper(),))
     conn.commit()
     conn.close()
 def get_all_special_plates():
@@ -63,7 +66,6 @@ def get_all_special_plates():
     res=c.fetchall()
     conn.close()
     return res
-# newly upgraded handle_vehicle with gate enforcement (Entry/Exit/Auto)
 def handle_vehicle(plate_text,v_type,img_path=None,gate_mode="Auto"):
     conn=sqlite3.connect(DB_NAME)
     c=conn.cursor()
@@ -71,19 +73,19 @@ def handle_vehicle(plate_text,v_type,img_path=None,gate_mode="Auto"):
     existing=c.fetchone()
     special=get_special_plate(plate_text)
     is_vip=special and special[0]=='VIP'
-    # Gate restriction logic - prevents exit gate from logging an entry and vice versa
+    # Enforcement for Multi-Gate: Exit gate cannot log a new entry, and vice versa
     if gate_mode=="Entry" and existing:
         conn.close()
-        return "Error",f"{plate_text} already inside!",None
+        return "Error",f"{plate_text} is already logged inside.",None
     if gate_mode=="Exit" and not existing:
         conn.close()
-        return "Error",f"{plate_text} not found in DB!",None
+        return "Error",f"{plate_text} has no entry record.",None
     if existing and gate_mode in ["Exit","Auto"]:
         entry_time_str=existing[3]
         entry_img=existing[4]
         entry_time=datetime.strptime(entry_time_str,"%Y-%m-%d %H:%M:%S")
         total_fee,duration,exit_time=calculate_fee(entry_time,v_type)
-        if is_vip:total_fee=0.0 
+        if is_vip:total_fee=0.0 # CEO/VIP cars are set to $0 fee automatically
         c.execute("DELETE FROM active_parking WHERE plate_number=?",(plate_text,))
         c.execute("INSERT INTO transaction_history(plate_number,vehicle_type,entry_time,exit_time,duration_min,total_fee,image_path) VALUES(?,?,?,?,?,?,?)",(plate_text,v_type,entry_time_str,exit_time.strftime("%Y-%m-%d %H:%M:%S"),duration,total_fee,entry_img))
         conn.commit()
@@ -99,9 +101,8 @@ def handle_vehicle(plate_text,v_type,img_path=None,gate_mode="Auto"):
         conn.commit()
         conn.close()
         return "Entry","Vehicle Entered",{"is_vip":is_vip}
-    else:
-        conn.close()
-        return "Error","Invalid gate operation",None
+    conn.close()
+    return "Error","Invalid gate operation",None
 def calculate_fee(entry_time,vehicle_type):
     cfg=get_config()
     rate=cfg[4] if vehicle_type=='car' else cfg[5]
@@ -109,8 +110,10 @@ def calculate_fee(entry_time,vehicle_type):
     exit_time=datetime.now()
     duration_sec=(exit_time-entry_time).total_seconds()
     duration_min=round(duration_sec/60,2)
+    # Standard 1-hour minimum charge block
     if duration_min<=60:billable_hours=1
     else:
+        # Subtract wiggle room minutes before rounding up to the next hour
         adjusted_min=duration_min-wiggle
         if adjusted_min<=0:billable_hours=0
         else:billable_hours=math.ceil(adjusted_min/60)
