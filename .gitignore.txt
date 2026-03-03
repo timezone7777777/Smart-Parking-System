@@ -3,4 +3,9 @@ captured_plates/
 __pycache__/
 *.pt
 temp.*
+parking.db
+captured_plates/
+__pycache__/
+*.pt
+temp.*
 .streamlit/
