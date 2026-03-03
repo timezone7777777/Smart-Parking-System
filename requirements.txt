@@ -1,0 +1,10 @@
+streamlit
+opencv-contrib-python
+pandas
+ultralytics
+easyocr
+pillow<10.0.0
+torch
+torchvision
+torchaudio
+# pip install -r requirements.txt
