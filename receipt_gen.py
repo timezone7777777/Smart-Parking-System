@@ -25,28 +25,6 @@ def generate_receipt(plate, v_type, entry_time, exit_time, duration, fee, img_pa
 
     y_pos = 140
 
-    # --- NEW: PASTE THE CAR PHOTO ---
-    if img_path and os.path.exists(img_path):
-        try:
-            car_img = Image.open(img_path)
-            # Calculate aspect ratio to resize it neatly
-            aspect_ratio = car_img.height / car_img.width
-            new_width = 320
-            new_height = int(new_width * aspect_ratio)
-            car_img = car_img.resize((new_width, new_height))
-
-            # Center the image horizontally on the 400px wide ticket
-            x_offset = (width - new_width) // 2
-            ticket.paste(car_img, (x_offset, y_pos))
-
-            y_pos += new_height + 30 # Push the text down below the new image
-        except Exception as e:
-            print(f"Could not load image: {e}")
-    else:
-        draw.text((100, y_pos), "[ Image Not Available ]", fill=(100, 100, 100), font=font_body)
-        y_pos += 50
-    # --------------------------------
-
     # Details
     details = [
         f"Plate Number: {plate}",
