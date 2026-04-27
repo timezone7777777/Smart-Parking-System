@@ -1,19 +1,25 @@
-streamlit
-opencv-contrib-python
-pandas
-ultralytics
-easyocr
-pillow<10.0.0
+# --- Core AI and Computer Vision ---
+ultralytics          # YOLOv8 for vehicle and plate detection
+easyocr              # Optical Character Recognition for reading plates
+opencv-python        # Image and video stream processing
+
+# --- Backend and API ---
+fastapi              # High-performance backend framework
+uvicorn              # ASGI server to run the FastAPI app
+
+# --- Frontend and Dashboard ---
+streamlit            # Main Admin Dashboard and Driver Website UI
+
+# --- Data Handling and Utilities ---
+pandas               # Managing parking logs and history data
+pillow               # Image processing for thermal receipts
+qrcode[pil]          # Dynamic QR code generation for mobile access
+requests             # Communication between Streamlit and the API
+
+# --- Deep Learning Framework ---
+# Note: For NVIDIA GPU support, see the installation note below
 torch
 torchvision
 torchaudio
-streamlit
-opencv-contrib-python
-pandas
-ultralytics
-easyocr
-pillow<10.0.0
-torch
-torchvision
-torchaudio
+
 # pip install -r requirements.txt
