@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 import os
 import receipt_gen
+import math
 
 app = FastAPI()
 DB_PATH = "parking.db"
@@ -114,7 +115,8 @@ async def process_vehicle(data: VehicleLog):
         
         # Check if VIP (Free parking)
         is_vip = cursor.execute("SELECT 1 FROM special_plates WHERE plate=? AND category='VIP'", (data.plate_text,)).fetchone()
-        fee = 0.0 if is_vip else round((billable_duration / 60) * rate, 2)
+        billable_hours = math.ceil(billable_duration / 60) if billable_duration > 0 else 0
+        fee = 0.0 if is_vip else float(billable_hours * rate)
         
         # 1. GENERATE VISUAL RECEIPT
         exit_str = exit_now.strftime('%Y-%m-%d %H:%M:%S')
